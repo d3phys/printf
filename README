@@ -1,0 +1,14 @@
+--------------------------------------------------
+Assembly language printf() implementation
+--------------------------------------------------
+
+Some 'original' printf() specifiers are supported:
+
+	%d	decimal
+	%x	hexadecimal
+	%o	octal
+	%b	binary
+	%c	character
+	%s	string
+
+                                2022 d3phys with ❤
