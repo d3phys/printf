@@ -13,6 +13,7 @@ section .text
 ;
 ; Important! Null-terminator is not copied. 
 ;------------------------------------------------
+section .text
 strcpy:
 	cld
 	xor rax, rax		
@@ -37,6 +38,7 @@ strcpy:
 ;
 ; Destrs: rax rbx rdx rdi  
 ;------------------------------------------------
+section .text
 itoa10:
 	cld
 	push rbp
@@ -74,6 +76,7 @@ itoa10:
 ;
 ; Destrs: rax rbx rdx rdi  
 ;------------------------------------------------
+section .text
 itoa2x:
 	cld
 	push rbp
@@ -104,127 +107,167 @@ section .text
 ;------------------------------------------------
 
 
-puts:	
-	mov     rdi, 1                 
-	mov     rax, 1                  
-	syscall                         		
-	ret
+;------------------------------------------------
+; printf(fmt, ...)
+;------------------------------------------------
+; Loads the data from the given locations, converts 
+; them to character string equivalents and writes 
+; the results to the output stream 1.
+;
+; Calling convention: cdecl
+;
+; Parameters:
+;
+;   fmt - pointer to a null-terminated multibyte string 
+;	  specifying how to interpret the data 
+;
+;   ... - arguments specifying data to print. 
+;
+;
+; Following conversion specifiers supported:
+;
+;   +===+============================+
+;   | % | 	Explanation          |
+;   +===+============================+
+;   | c | single character           |
+;   +---+----------------------------+
+;   | s | character string           |
+;   +---+----------------------------+
+;   | d | decimal representation     |
+;   +---+----------------------------+
+;   | x | hexadecimal representation |
+;   +---+----------------------------+
+;   | o | octal representation       |
+;   +---+----------------------------+
+;   | b | binary representation      |
+;   +---+----------------------------+
+
+%define write  0x1
+%define stdout 0x1
+%define arg(id) [rbp + 16 + 8 * id]
 
 printf:
-	push 	rbp
-	mov 	rbp, rsp
+	cld
+	push rbp
+	mov rbp, rsp
 
-	mov rsi, message
-	mov rdi, printf_buf
+	xor r8, r8		; Initialize args counter.
+	mov rsi, arg(0)		; Get fmt string.
+	mov rdi, prbuf		; Set dest to printf buffer.
 	
-	mov rax, 13
-	mov cl, 1
-	mov rbx, 1
-	
-	call itoa2x	
-	
-	mov 	rdi, [rbp + 16]
-	xor 	rax, rax
-
 .copy:	
-	movzx	rdx, byte [rdi + rax]
+	lodsb			; Read character from fmt string
+	cmp al, '%'		; and check if it is a format keyword.
+	je .format		; Copy character otherwise.
+	stosb			; 
 	
-	cmp	dl, '%'
-	je 	.format
-
-	mov 	byte [printf_buf + rax], dl
-	inc 	rax
-
-	test 	dl, dl
-	jnz 	.copy
-
-	mov 	rsi, printf_buf
-	mov 	rdx, rax
-	call 	puts
-
-	pop 	rbp
-	ret 	1 * 0x8
-
+	test al, al		; Leave if the character copied was
+	jnz .copy		; a null terminator.
+				
+	mov rdx, rdi		; Calculate prbuf length being used. 
+	sub rdx, prbuf		; 
 	
-.format:
-	inc	rax
-	movzx	rdx, byte [rdi + rax]
+	mov rsi, prbuf		; Call system 64bit write syscall.
+	mov rdi, stdout         ; 	       
+	mov rax, write          ;        
+	syscall                 ;	        		
+				
+	pop rbp			
+	ret			
+				
+.format:				
+	xor rax, rax		; Get format specifier.
+	lodsb			; Make shure that it is not a '%'. 
+	cmp al, '%'		; 
+	je .pct			;
 	
-	cmp	dl,  '%'
-	je 	.pct
+	lea rdx, [rax - 'b']	; Normalize format to use jump table
+	cmp rdx, 'x' - 'b'	; later. Jump to default label in   
+	ja .def 		; case of overflow.
 
-	
-	lea 	rdx, [rdx - 'b']
-	cmp	rdx, 'x' - 'b'
-	ja 	.dflt
+	inc r8			; Get next argument and call 
+	mov rax, arg(r8)	; suitable function by jump table.
+	jmp [.jmptab + 8 * rdx] ;
 
-	jmp 	[.jmp_table + 8 * rdx]
+;------------------------------------------------
+; Jump table handlers:
+; Note! rax - function parameter. 
 
-.hex:
-	mov rcx, 1
-	jmp .copy
+.pct:	
+.chr:
+	stosb			
+	jmp .copy	
 .dec:
-	mov rcx, 2
+	call itoa10
+	jmp .copy
+.hex:
+	mov cl,  0x4		; Shift: 16 = 2^4.
+	mov rbx, 0xf		; Mask:  00001111.
+	call itoa2x		; 
 	jmp .copy
 .oct:
-	mov rcx, 3
-	jmp .copy
-.str:
-	mov rcx, 4
-	jmp .copy
-.chr:
-	mov rcx, 5
+	mov cl,  0x3		; Shift:  8 = 2^3.
+	mov rbx, 0x7		; Mask:  00000111.
+	call itoa2x		;
 	jmp .copy
 .bin:
-	mov rcx, 6
+	mov cl,  0x1		; Shift:  2 = 2^1. 
+	mov rbx, 0x1		; Mask:  00000001.
+	call itoa2x		;	
 	jmp .copy
-.pct:	
-	mov rcx, 7
+.str:			
+	mov r10, rsi		; Have to save source format string
+	mov rsi, rax		; position in r10.
+	call strcpy		;
+	mov rsi, r10		;
 	jmp .copy
-.dflt:
-	mov rcx, 666
-	jmp .copy
+.def:
+	mov rcx, 0xdead		; TODO: error handling.
+	jmp .copy		; 	
 
-	
+%define dup(from, to) times (to - from - 1)	
 section .data
-.jmp_table:
-	dq .bin
-	dq .chr
-	dq .dec
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .oct
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .str
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .dflt
-	dq .hex
+.jmptab:
+		dq .bin
+		dq .chr
+	 	dq .dec
+dup('d', 'o') 	dq .def
+		dq .oct
+dup('o', 's')	dq .def
+		dq .str
+dup('s', 'x')	dq .def
+		dq .hex	
+%undef dup
 
-printf_buf times 30 db 'a' 
-
-
+prbuf times 1024 db 'a' 
 section .text
-_start:
-	push 	message
-	call 	printf
 
-	mov     eax, 60                 ; system call 60 is exit
-	xor     rdi, rdi                ; exit code 0
+%undef arg
+%undef write
+%undef stdout
+;------------------------------------------------
+;------------------------------------------------
+
+
+_start:
+
+	push 321245
+	push 131313
+	push 123450321
+	push submsg
+	push 321
+	push 'g'
+	push 0x32
+	push message
+	call printf
+	times 6 pop rax
+	
+	mov eax, 60                 ; system call 60 is exit
+	xor rdi, rdi                ; exit code 0
 	syscall
 
 section .data
-message db      "%c%%%gH%e%%ll%o, World", 0xa, 0x0      ; note the newline at the end
+submsg 	db "inner msg %s%c%x and", 0x0
+message db "he%%ll%x%c%do %s%d %d %d  world", 0xa, 0x0      ; note the newline at the end
 	
 msg_len equ $ - message         
