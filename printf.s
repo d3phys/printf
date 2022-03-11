@@ -6,31 +6,52 @@
 global  _start
 section .text
 
+%macro  mpush 1-* 
+  %rep  %0 
+        push    %1 
+  %rotate 1 
+  %endrep 
+%endmacro
+
+%define test(num) "Test ", num + '0', 0xa
+
 _start:
 
-	push 321245
-	push 131313
-	push 123450321
-	
-	push 321
-	push 'g'
-	push submsg
-	mov rax, -3213212
-	push rax
-	push message
-	call printf
-	times 6 pop rax
-	
-	mov eax, 60                 ; system call 60 is exit
-	xor rdi, rdi                ; exit code 0
-	syscall
-
+;------------------------------------------------
+; Test #1
+;------------------------------------------------
 section .data
-submsg 	db "inner msg %s%c%x and", 0x0
-message db "hello world %d and %s", 0xa, 0x0      ; note the newline at the end
-	
-msg_len equ $ - message         
+m1 db "Test 1:", 		0xa,
+   db "0x32212   | 0x%x", 	0xa,
+   db "123456701 | %d", 	0xa,
+   db "1011      | %b", 	0xa,
+   db "776       | %o", 	0xa, 0xa, 0xa, 0x0
 
+section .text
+	mpush 510, 11, 123456701, 0x32212, m1
+	call printf
+	times 4 pop rax
+;------------------------------------------------
+
+;------------------------------------------------
+; Test #2
+;------------------------------------------------
+section .data
+s2 db "hello world", 0x0
+m2 db "Test 2:", 	    0xa,
+   db "hello world | %s",   0xa,
+   db "prc         | %%",   0xa,
+   db "12-42       | %x%d", 0xa, 0xa, 0xa, 0x0
+
+section .text
+	mpush -42, 0x12, s2, m2
+	call printf
+	times 4 pop rax
+;------------------------------------------------
+	
+	mov eax, 60
+	xor rdi, rdi
+	syscall      
 
 
 ;------------------------------------------------
