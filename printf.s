@@ -74,31 +74,42 @@ itoa10:
 ;	  rbx - mask 
 ;	  rdi - buffer to store string
 ;
+; Return: rdi - address of the character 
+;		following the last digit. 
+;
 ; Destrs: rax rbx rdx rdi  
 ;------------------------------------------------
 section .text
 itoa2x:
 	cld
-	push rbp
-	mov rbp, rsp	
+	push rsi
+	mov rdx, rax			; Move to make similar to itoa10.
+	mov rsi, rdi			; Save write initial position.
 	
-.save_dgt:	 
-	mov rdx, rax			; Push remainder to the stack	
- 	and rdx, rbx			;
-	movzx rdx, byte [xlattab + rdx]	;
- 	push rdx			;
- 	shr rax, cl 			;
+.savedgt:	 
+	mov rax, rdx			; Save remainder to the print 	
+ 	and rax, rbx			; buffer.
+	mov al, byte [xlattab + rax]	;
+ 	shr rdx, cl 			;
+ 	stosb				;
  	
- 	test rax, rax
-	jnz .save_dgt	
-	
-.reverse:	
-	pop rax				; Store digit characters in	
-	stosb				; reversed order
-	cmp rbp, rsp			;
-	jnz .reverse			;
+ 	test rdx, rdx			; Leave when all digits are 
+	jnz .savedgt			; saved.
 
-	pop rbp
+	mov rbx, rdi			; Can't use rdi, due it is being
+	dec rbx				; returned.
+	
+.reverse:
+	mov al, byte [rsi]		; Reverse digits in memory.
+	xchg byte [rbx], al 		; 
+	mov byte [rsi], al		;
+	dec rbx				;
+	inc rsi				;
+	
+	cmp rbx, rsi
+	ja .reverse
+	
+	pop rsi	
 	ret
 
 section .data
@@ -188,6 +199,7 @@ printf:
 	inc r8			; Get next argument and call 
 	mov rax, arg(r8)	; suitable function by jump table.
 	jmp [.jmptab + 8 * rdx] ;
+	
 
 ;------------------------------------------------
 ; Jump table handlers:
@@ -215,11 +227,11 @@ printf:
 	mov rbx, 0x1		; Mask:  00000001.
 	call itoa2x		;	
 	jmp .copy
-.str:			
-	mov r10, rsi		; Have to save source format string
-	mov rsi, rax		; position in r10.
-	call strcpy		;
-	mov rsi, r10		;
+.str:	
+	push rsi		
+	mov rsi, rax
+	call strcpy
+	pop rsi
 	jmp .copy
 .def:
 	mov rcx, 0xdead		; TODO: error handling.
@@ -238,8 +250,8 @@ dup('o', 's')	dq .def
 dup('s', 'x')	dq .def
 		dq .hex	
 %undef dup
-
-prbuf times 1024 db 'a' 
+section .bss
+prbuf 	resb 1024
 section .text
 
 %undef arg
@@ -254,10 +266,12 @@ _start:
 	push 321245
 	push 131313
 	push 123450321
-	push submsg
+	
 	push 321
 	push 'g'
-	push 0x32
+	push submsg
+	mov rax, 0xffffffffffffffff
+	push rax
 	push message
 	call printf
 	times 6 pop rax
@@ -268,6 +282,6 @@ _start:
 
 section .data
 submsg 	db "inner msg %s%c%x and", 0x0
-message db "he%%ll%x%c%do %s%d %d %d  world", 0xa, 0x0      ; note the newline at the end
+message db "hello world %o and %s", 0xa, 0x0      ; note the newline at the end
 	
 msg_len equ $ - message         
