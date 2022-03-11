@@ -1,121 +1,36 @@
+;------------------------------------------------
+; printf() function implementation.
+; Copywhat (C) 2022 Denis Dedkov
+
+
 global  _start
-
 section .text
 
-;------------------------------------------------
-; Copies null-terminated string from one buffer
-; to another.
-;
-; Expect: rsi - null terminated string copy from
-;	  rdi - buffer copy to
-;
-; Destrs: rax rsi rdi
-;
-; Important! Null-terminator is not copied. 
-;------------------------------------------------
-section .text
-strcpy:
-	cld
-	xor rax, rax		
-.copy:	
-	lodsb		
-	test al, al
-	jz .stop
-			
-	stosb	
-	jmp .copy
-	
-.stop:
-	ret
-;------------------------------------------------
+_start:
 
-;------------------------------------------------
-; Converts an integer value to a string using 
-; the base of 10.
-;
-; Expect: rax - integer to convert
-;	  rdi - buffer to store string
-;
-; Destrs: rax rbx rdx rdi  
-;------------------------------------------------
-section .text
-itoa10:
-	cld
-	push rbp
-	mov rbp, rsp	
-	mov rbx, 10	
-
-.save_dgt:	
-	xor rdx, rdx	; Push remainder	
- 	div rbx		; to stack
-	add rdx, '0'	;
- 	push rdx	;
- 	
- 	test rax, rax
-	jnz .save_dgt	
+	push 321245
+	push 131313
+	push 123450321
 	
-.reverse:	
-	pop rax		; Store digit characters in	
-	stosb		; reversed order
-	cmp rbp, rsp	;
-	jnz .reverse	;
-
-	pop rbp
-	ret
-;------------------------------------------------
-
-;------------------------------------------------
-; Converts an integer value to a string using 
-; the base of the power of 2.
-;
-; Expect: 
-;	  rax - integer to convert
-;	   cl - base (power of 2)
-;	  rbx - mask 
-;	  rdi - buffer to store string
-;
-; Return: rdi - address of the character 
-;		following the last digit. 
-;
-; Destrs: rax rbx rdx rdi  
-;------------------------------------------------
-section .text
-itoa2x:
-	cld
-	push rsi
-	mov rdx, rax			; Move to make similar to itoa10.
-	mov rsi, rdi			; Save write initial position.
+	push 321
+	push 'g'
+	push submsg
+	mov rax, -3213212
+	push rax
+	push message
+	call printf
+	times 6 pop rax
 	
-.savedgt:	 
-	mov rax, rdx			; Save remainder to the print 	
- 	and rax, rbx			; buffer.
-	mov al, byte [xlattab + rax]	;
- 	shr rdx, cl 			;
- 	stosb				;
- 	
- 	test rdx, rdx			; Leave when all digits are 
-	jnz .savedgt			; saved.
-
-	mov rbx, rdi			; Can't use rdi, due it is being
-	dec rbx				; returned.
-	
-.reverse:
-	mov al, byte [rsi]		; Reverse digits in memory.
-	xchg byte [rbx], al 		; 
-	mov byte [rsi], al		;
-	dec rbx				;
-	inc rsi				;
-	
-	cmp rbx, rsi
-	ja .reverse
-	
-	pop rsi	
-	ret
+	mov eax, 60                 ; system call 60 is exit
+	xor rdi, rdi                ; exit code 0
+	syscall
 
 section .data
-xlattab db '0123456789abcdef'
-section .text
-;------------------------------------------------
+submsg 	db "inner msg %s%c%x and", 0x0
+message db "hello world %d and %s", 0xa, 0x0      ; note the newline at the end
+	
+msg_len equ $ - message         
+
 
 
 ;------------------------------------------------
@@ -157,6 +72,7 @@ section .text
 %define stdout 0x1
 %define arg(id) [rbp + 16 + 8 * id]
 
+section .text
 printf:
 	cld
 	push rbp
@@ -261,27 +177,150 @@ section .text
 ;------------------------------------------------
 
 
-_start:
+;------------------------------------------------
+; strcpy()
+;------------------------------------------------
+; Copies null-terminated string from one buffer
+; to another.
+;
+; Expect: rsi - null terminated string copy from
+;	  rdi - buffer copy to
+;
+; Return: rdi - address of the character 
+;		following the symbol
+;
+; Destrs: rax rsi rdi
+;
+; Important! Null-terminator is not copied. 
+;------------------------------------------------
+section .text
+strcpy:
+	cld
+	xor rax, rax		
+.copy:	
+	lodsb		
+	test al, al
+	jz .stop
+			
+	stosb	
+	jmp .copy
+	
+.stop:
+	ret
+;------------------------------------------------
+;------------------------------------------------
 
-	push 321245
-	push 131313
-	push 123450321
+
+;------------------------------------------------
+; itoa10()
+;------------------------------------------------
+; Converts an integer value to a string using 
+; the base of 10.
+;
+; Expect: rax - integer to convert
+;	  rdi - buffer to store string
+;
+; Return: rdi - address of the character 
+;		following the last digit
+;
+; Destrs: rax rbx rdx rdi  
+;------------------------------------------------
+section .text
+itoa10:
+	cld
+	push rsi
+				
+	test rax, rax			; Take into account the first
+	jns .init 			; sign bit. Place '-' character
+	neg rax				; if value is negative and make
+	mov byte [rdi], '-'		; it positive.
+	inc rdi				;
 	
-	push 321
-	push 'g'
-	push submsg
-	mov rax, 0xffffffffffffffff
-	push rax
-	push message
-	call printf
-	times 6 pop rax
+.init:
+	mov rsi, rdi			; Save write initial position.	
+	mov rbx, 10			; Set base	
 	
-	mov eax, 60                 ; system call 60 is exit
-	xor rdi, rdi                ; exit code 0
-	syscall
+.savedgt:	
+	xor rdx, rdx			; Save remainder to the print
+ 	div rbx				; buffer.
+	add rdx, '0'			;
+ 	mov byte [rdi], dl		;
+	inc rdi				;
+ 	
+ 	test rax, rax
+	jnz .savedgt	
+
+	mov rbx, rdi			; Can't use rdi, due it is being
+	dec rbx				; returned.
+	
+.reverse:
+	mov al, byte [rsi]		; Reverse digits in memory.
+	xchg byte [rbx], al 		; 
+	mov byte [rsi], al		;
+	dec rbx				;
+	inc rsi				;
+	
+	cmp rbx, rsi
+	ja .reverse
+		
+	pop rsi	
+	ret
+;------------------------------------------------
+;------------------------------------------------
+
+
+;------------------------------------------------
+; itoa2x()
+;------------------------------------------------
+; Converts an integer value to a string using 
+; the base of the power of 2.
+;
+; Expect: rax - integer to convert
+;	   cl - base (power of 2)
+;	  rbx - mask 
+;	  rdi - buffer to store string
+;
+; Return: rdi - address of the character 
+;		following the last digit. 
+;
+; Destrs: rax rbx rdx rdi  
+;------------------------------------------------
+section .text
+itoa2x:
+	cld
+	push rsi
+	mov rdx, rax			; Move to make similar to itoa10.
+	mov rsi, rdi			; Save write initial position.
+	
+.savedgt:	 
+	mov rax, rdx			; Save remainder to the print 	
+ 	and rax, rbx			; buffer.
+	mov al, byte [xlattab + rax]	;
+ 	shr rdx, cl 			;
+ 	stosb				;
+ 	
+ 	test rdx, rdx			; Leave when all digits are 
+	jnz .savedgt			; saved.
+
+	mov rbx, rdi			; Can't use rdi, due it is being
+	dec rbx				; returned.
+	
+.reverse:
+	mov al, byte [rsi]		; Reverse digits in memory.
+	xchg byte [rbx], al 		; 
+	mov byte [rsi], al		;
+	dec rbx				;
+	inc rsi				;
+	
+	cmp rbx, rsi
+	ja .reverse
+	
+	pop rsi	
+	ret
 
 section .data
-submsg 	db "inner msg %s%c%x and", 0x0
-message db "hello world %o and %s", 0xa, 0x0      ; note the newline at the end
-	
-msg_len equ $ - message         
+xlattab db '0123456789abcdef'
+section .text
+;------------------------------------------------
+;------------------------------------------------
+
