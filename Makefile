@@ -11,7 +11,9 @@ EXE   = print asmcall
 
 test: main.o print.o
 	ld $^ $(crt) $(libc) -I$(ld) -o print
-	./print
+	./print > temp
+	python testit.py temp
+	rm temp
 
 asmcall: asmcall.o print.o
 	ld $^ $(libc) -I$(ld) -o asmcall
@@ -24,7 +26,7 @@ asmcall.o: asmcall.s
 	nasm -f elf64 $< -o $@	
 	
 %.o: %.c
-	gcc -c $< -o $@
+	g++ -c $< -o $@
 
 clean:
 	rm -f *.o
