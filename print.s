@@ -88,7 +88,7 @@ cdecl_print:
         test al, al		; Leave if the character copied was
         jnz .copy		; a null terminator.
                                 
-        mov rdx, rdi		; Calculate prbuf length being used. 
+        lea rdx, [rdi - 1]	; Calculate prbuf length being used. 
         sub rdx, prbuf		; 
         
         mov rsi, prbuf		; Call system 64bit write syscall.
