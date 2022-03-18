@@ -2,7 +2,8 @@
 ; printf() function implementation.
 ; Copywhat (C) 2022 Denis Dedkov
 
-global print
+global cdecl_print
+global       print
 
 ;------------------------------------------------
 ; print stdcall to cdecl adapter
@@ -18,7 +19,7 @@ print:
         push rdi        ;
 
         mov r10, rax    ; Save return address
-        call __print    
+        call cdecl_print    
 
         push r10
         ret 6 * 8
@@ -26,7 +27,7 @@ print:
 ;------------------------------------------------
 
 ;------------------------------------------------
-; __print(fmt, ...)
+; cdecl_print(fmt, ...)
 ;------------------------------------------------
 ; Loads the data from the given locations, converts 
 ; them to character string equivalents and writes 
@@ -69,7 +70,7 @@ print:
 %define arg(id) [rbp + 16 + 8 * id]
 
 section .text
-__print:
+cdecl_print:
         cld
         push rbp
         mov rbp, rsp
